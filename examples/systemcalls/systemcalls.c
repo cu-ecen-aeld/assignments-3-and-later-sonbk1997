@@ -117,26 +117,28 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
-    int pid;
-    switch (pid = fork()) {
-    case -1:
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork failed");
         return false;
-    case 0: // child
+    }
+
+    if( pid == 0 ) {
         int fd = open(outputfile, O_WRONLY | O_TRUNC | O_CREAT, 0644);
         if ( dup2(fd, 1) < 0 ) { 
             close(fd);
             return false;
         }
         execv(command[0], command);
-        exit(EXIT_FAILURE);
-    default: // parent
+         _exit(EXIT_FAILURE);
+    } else {
         int status;
-        pid_t c_pid = waitpid(pid, &status, 0);
-        if (c_pid < 0 || WEXITSTATUS(status) != EXIT_SUCCESS) 
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid failed");
             return false;
+        }
+
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
     }
-
-    va_end(args);
-
-    return true;
 }
