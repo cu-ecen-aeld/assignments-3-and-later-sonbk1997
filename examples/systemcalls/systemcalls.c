@@ -16,6 +16,11 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    // sonbk1997 edit
+    int ret = system(cmd);
+    if (ret == -1) {
+        return false;
+    }
 
     return true;
 }
@@ -58,10 +63,30 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
     va_end(args);
+    // sonbk1997 edit
 
-    return true;
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork failed");
+        return false;
+    }
+
+    if( pid == 0 ) {
+        // child process
+        execv(command[0], command);
+         _exit(EXIT_FAILURE);
+    } else {
+        // parent process
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid failed");
+            return false;
+        }
+
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    }
 }
 
 /**
@@ -92,6 +117,24 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int pid;
+    switch (pid = fork()) {
+    case -1:
+        return false;
+    case 0: // child
+        int fd = open(outputfile, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+        if ( dup2(fd, 1) < 0 ) { 
+            close(fd);
+            return false;
+        }
+        execv(command[0], command);
+        exit(EXIT_FAILURE);
+    default: // parent
+        int status;
+        pid_t c_pid = waitpid(pid, &status, 0);
+        if (c_pid < 0 || WEXITSTATUS(status) != EXIT_SUCCESS) 
+            return false;
+    }
 
     va_end(args);
 
